@@ -72,6 +72,13 @@ A custom [Home Assistant](https://www.home-assistant.io/) integration that monit
 | Firmware Version | Current firmware version (diagnostic) |
 | Last Updated | Last cloud update timestamp (diagnostic) |
 
+### Number Controls
+
+| Entity | Description |
+|--------|-------------|
+| Probe 1 Target Temp | Set food probe 1 target temperature (100-250°F slider) |
+| Probe 2 Target Temp | Set food probe 2 target temperature (100-250°F slider) |
+
 ### Binary Sensors
 
 | Entity | Description |
@@ -112,13 +119,13 @@ This integration authenticates with AWS Cognito (the same auth used by the GMG P
 
 - **Cloud-only** -- Requires internet connectivity. Local/Bluetooth control is not supported.
 - **Polling-based** -- Updates every 30 seconds. Not real-time.
-- **Food probe temp control** -- Probe target temps are exposed in the API but not yet wired to HA number entities. Coming soon.
+- **Food probe temp control** -- Probe target temps can be set via number entity sliders (100-250°F).
 
 ## Roadmap
 
 - [x] Monitoring (temperature, status, warnings, pellet alerts)
 - [x] Command support (set grill temp, power on/off)
-- [ ] Number entities for food probe target temperatures
+- [x] Number entities for food probe target temperatures
 - [ ] Configurable polling interval
 - [ ] Cook profile management
 - [ ] Temperature alert automations
