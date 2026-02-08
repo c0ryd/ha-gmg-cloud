@@ -12,7 +12,8 @@ A custom [Home Assistant](https://www.home-assistant.io/) integration that monit
 - **Fire state** sensor with ignition progress
 - **Cook profile** status -- active, paused, or none (with remaining time)
 - **Firmware version** and **last cloud update** timestamp
-- **Climate entity** for grill temperature display and (future) control
+- **Climate entity** with full control -- set grill temperature, power on/off
+- **Grill mode selection** -- grill, smoke, or pizza mode power-on
 
 ## Prerequisites
 
@@ -49,7 +50,7 @@ A custom [Home Assistant](https://www.home-assistant.io/) integration that monit
 
 | Entity | Description |
 |--------|-------------|
-| GMG Grill | Shows current grill temp and target temp. Displays HEAT when grilling/smoking, OFF otherwise. |
+| GMG Grill | Shows current grill temp and target temp. Set target temperature (150-550°F). Switch between HEAT (power on) and OFF (power off). |
 
 ### Sensors
 
@@ -89,16 +90,31 @@ This integration authenticates with AWS Cognito (the same auth used by the GMG P
 
 - `GET /grill` -- Discover grills on the account
 - `GET /grill/{connectionType}|{grillId}/state` -- Poll grill state (temperatures, warnings, profile status, etc.)
+- `PUT /grill/{connectionType}|{grillId}/command` -- Send plaintext commands (set temp, power on/off, etc.)
+
+### Supported Commands
+
+| Command | Description |
+|---------|-------------|
+| `UT{NNN}!` | Set grill target temperature (150-550°F) |
+| `UF{NNN}!` | Set food probe 1 target temperature |
+| `Uf{NNN}!` | Set food probe 2 target temperature |
+| `UK001!` | Power on in grill mode |
+| `UK002!` | Power on in smoke mode |
+| `UK003!` | Power on in pizza mode |
+| `UN!` | Power off |
 
 ## Current Limitations
 
-- **Read-only** -- Command sending (set temperature, power on/off) is not yet implemented. The command protocol has been reverse engineered and will be added in a future release.
 - **Cloud-only** -- Requires internet connectivity. Local/Bluetooth control is not supported.
 - **Polling-based** -- Updates every 30 seconds. Not real-time.
+- **Food probe temp control** -- Probe target temps are exposed in the API but not yet wired to HA number entities. Coming soon.
 
 ## Roadmap
 
-- [ ] Command support (set grill temp, set probe temps, power on/off)
+- [x] Monitoring (temperature, status, warnings, pellet alerts)
+- [x] Command support (set grill temp, power on/off)
+- [ ] Number entities for food probe target temperatures
 - [ ] Configurable polling interval
 - [ ] Cook profile management
 - [ ] Temperature alert automations
