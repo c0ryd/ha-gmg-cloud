@@ -212,6 +212,43 @@ class GMGCloudApi:
             _LOGGER.error("Error sending command: %s", err)
             return False
 
+    # ── Command helpers ──────────────────────────────────────────────
+    # Plaintext ASCII commands discovered from GMG Prime app decompilation.
+    # Sent via PUT /grill/{connectionType}|{grillId}/command
+    # with Content-Type: application/octet-stream.  No encryption needed
+    # on the REST path (encryption is BLE-only).
+
+    async def async_set_grill_temp(self, grill: dict, temp: int) -> bool:
+        """Set grill target temperature (150-550°F). Command: UT{NNN}!"""
+        temp = max(150, min(550, temp))
+        return await self.async_send_command(grill, f"UT{temp:03d}!".encode())
+
+    async def async_set_food_probe1_temp(self, grill: dict, temp: int) -> bool:
+        """Set food probe 1 target temperature (100-250°F). Command: UF{NNN}!"""
+        temp = max(100, min(250, temp))
+        return await self.async_send_command(grill, f"UF{temp:03d}!".encode())
+
+    async def async_set_food_probe2_temp(self, grill: dict, temp: int) -> bool:
+        """Set food probe 2 target temperature (100-250°F). Command: Uf{NNN}!"""
+        temp = max(100, min(250, temp))
+        return await self.async_send_command(grill, f"Uf{temp:03d}!".encode())
+
+    async def async_power_on_grill(self, grill: dict) -> bool:
+        """Power on in grill mode. Command: UK001!"""
+        return await self.async_send_command(grill, b"UK001!")
+
+    async def async_power_on_smoke(self, grill: dict) -> bool:
+        """Power on in smoke mode. Command: UK002!"""
+        return await self.async_send_command(grill, b"UK002!")
+
+    async def async_power_on_pizza(self, grill: dict) -> bool:
+        """Power on in pizza mode. Command: UK003!"""
+        return await self.async_send_command(grill, b"UK003!")
+
+    async def async_power_off(self, grill: dict) -> bool:
+        """Power off the grill. Command: UN!"""
+        return await self.async_send_command(grill, b"UN!")
+
     async def async_close(self) -> None:
         """Close the API session."""
         if self._session and not self._session.closed:

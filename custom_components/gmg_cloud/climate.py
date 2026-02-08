@@ -164,31 +164,30 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set HVAC mode.
+        """Set HVAC mode (power on/off).
 
-        TODO: Command sending requires building the encrypted binary payload.
-        The endpoint is PUT /grill/{connectionType}|{grillId}/command
-        with Content-Type: application/octet-stream.
-        Command strings discovered: UL! (power on?), UN! (power off?).
+        Power on defaults to grill mode. Use the grill_mode service
+        or extra state attributes to switch between grill/smoke/pizza.
         """
-        _LOGGER.warning(
-            "GMG command sending not yet implemented. "
-            "Need to build encrypted binary payload for hvac_mode=%s",
-            hvac_mode,
-        )
+        if hvac_mode == HVACMode.OFF:
+            if await self._api.async_power_off(self._grill):
+                self._hvac_mode = HVACMode.OFF
+                self.async_write_ha_state()
+                await self.coordinator.async_request_refresh()
+        elif hvac_mode == HVACMode.HEAT:
+            if await self._api.async_power_on_grill(self._grill):
+                self._hvac_mode = HVACMode.HEAT
+                self.async_write_ha_state()
+                await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set target temperature.
-
-        TODO: Command string is UT{temp}! - need to build encrypted payload.
-        """
+        """Set grill target temperature (150-550°F)."""
         if ATTR_TEMPERATURE in kwargs:
             temp = int(kwargs[ATTR_TEMPERATURE])
-            _LOGGER.warning(
-                "GMG command sending not yet implemented. "
-                "Need to build encrypted binary payload for temp=%s",
-                temp,
-            )
+            if await self._api.async_set_grill_temp(self._grill, temp):
+                self._target_temp = temp
+                self.async_write_ha_state()
+                await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self) -> None:
         """Turn the grill on."""

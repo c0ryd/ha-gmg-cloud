@@ -1,7 +1,7 @@
 {
   "domain": "gmg_cloud",
   "name": "Green Mountain Grill Cloud",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "documentation": "https://github.com/c0ryd/ha-gmg-cloud",
   "codeowners": ["@c0ryd"],
   "requirements": ["pycognito>=2024.5.1", "aiohttp>=3.8.0"],
