@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="gmg.png" alt="Green Mountain Grills" width="200">
+</p>
+
 # Green Mountain Grill Cloud Integration for Home Assistant
 
-A custom [Home Assistant](https://www.home-assistant.io/) integration that monitors [Green Mountain Grills](https://greenmountaingrills.com/) (GMG) via the GMG cloud API -- the same API used by the official **GMG Prime** mobile app.
+A custom [Home Assistant](https://www.home-assistant.io/) integration that monitors and controls [Green Mountain Grills](https://greenmountaingrills.com/) (GMG) via the GMG cloud API -- the same API used by the official **GMG Prime** mobile app.
 
 ## Features
 
@@ -9,7 +13,7 @@ A custom [Home Assistant](https://www.home-assistant.io/) integration that monit
 - **Grill status** -- off, grilling, smoking, fan mode
 - **Low pellets alert** -- binary sensor that triggers when pellets are low
 - **Warning sensor** -- low pellets, fan disconnect, ignitor disconnect, auger disconnect
-- **Fire state** sensor with ignition progress
+- **Fire state** sensor -- off, startup, running, cool_down, fail, cold_smoke
 - **Cook profile** status -- active, paused, or none (with remaining time)
 - **Firmware version** and **last cloud update** timestamp
 - **Climate entity** with full control -- set grill temperature, power on/off
@@ -63,7 +67,7 @@ A custom [Home Assistant](https://www.home-assistant.io/) integration that monit
 | Target Probe 2 Temp | Target temperature for food probe 2 |
 | Status | Grill operating state: off, grilling, smoking, fan_mode, offline |
 | Warning | Active warning: none, low_pellets, fan_disconnect, ignitor_disconnect, auger_disconnect |
-| Fire State | Fire/ignitor state value with ignition progress |
+| Fire State | Fire/ignitor state: off, startup, running, cool_down, fail, cold_smoke (raw code + progress in attributes) |
 | Cook Profile | Cook profile status: none, active, paused (remaining time in attributes) |
 | Firmware Version | Current firmware version (diagnostic) |
 | Last Updated | Last cloud update timestamp (diagnostic) |

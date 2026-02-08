@@ -41,6 +41,18 @@ GRILL_STATES = {
     3: "smoking",
 }
 
+# fireState enum from community reverse engineering
+# Source: github.com/brandenc40/green-mountain-grill
+FIRE_STATES = {
+    0: "default",
+    1: "off",
+    2: "startup",
+    3: "running",
+    4: "cool_down",
+    5: "fail",
+    198: "cold_smoke",
+}
+
 
 def _device_info(grill: dict, grill_id: str, grill_name: str) -> dict[str, Any]:
     """Return shared device info for all sensors."""
@@ -250,7 +262,12 @@ class GMGWarningSensor(CoordinatorEntity, SensorEntity):
 
 
 class GMGFireStateSensor(CoordinatorEntity, SensorEntity):
-    """GMG fire/ignitor state sensor."""
+    """GMG fire/ignitor state sensor.
+
+    Fire state enum (from community reverse engineering):
+    0=default, 1=off, 2=startup (igniting), 3=running,
+    4=cool_down, 5=fail, 198=cold_smoke.
+    """
 
     _attr_has_entity_name = True
 
@@ -273,20 +290,37 @@ class GMGFireStateSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def icon(self) -> str:
-        return "mdi:fire" if self._attr_native_value else "mdi:fire-off"
+        val = self._attr_native_value
+        if val == "running":
+            return "mdi:fire"
+        elif val == "startup":
+            return "mdi:fire-alert"
+        elif val == "cool_down":
+            return "mdi:fan"
+        elif val == "cold_smoke":
+            return "mdi:smoke"
+        elif val == "fail":
+            return "mdi:alert-circle"
+        elif val in ("off", "default"):
+            return "mdi:fire-off"
+        return "mdi:fire-off"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         state = _get_state(self.coordinator, self._grill_id)
         if state:
-            return {"fire_state_progress": state.get("fireStateProgress", 0)}
+            return {
+                "fire_state_code": state.get("fireState", 0),
+                "fire_state_progress": state.get("fireStateProgress", 0),
+            }
         return {}
 
     @callback
     def _handle_coordinator_update(self) -> None:
         state = _get_state(self.coordinator, self._grill_id)
         if state:
-            self._attr_native_value = state.get("fireState", 0)
+            code = state.get("fireState", 0)
+            self._attr_native_value = FIRE_STATES.get(code, f"unknown_{code}")
         else:
             self._attr_native_value = None
         self.async_write_ha_state()
