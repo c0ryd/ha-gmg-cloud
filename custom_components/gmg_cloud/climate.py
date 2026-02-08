@@ -54,7 +54,7 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
-    _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+    _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.FAN_ONLY]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_min_temp = MIN_TEMP_F
     _attr_max_temp = MAX_TEMP_F
@@ -154,8 +154,10 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
                     # Determine HVAC mode from grillState enum
                     # grillState: 0=off, 1=grillMode, 2=fanMode, 3=smokeMode
                     grill_state = state.get("grillState", 0)
-                    if grill_state > 0:
+                    if grill_state in (1, 3):  # grillMode or smokeMode
                         self._hvac_mode = HVACMode.HEAT
+                    elif grill_state == 2:  # fanMode (cool-down cycle)
+                        self._hvac_mode = HVACMode.FAN_ONLY
                     else:
                         self._hvac_mode = HVACMode.OFF
                 else:

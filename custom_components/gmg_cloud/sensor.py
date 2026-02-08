@@ -51,6 +51,7 @@ FIRE_STATES = {
     4: "cool_down",
     5: "fail",
     198: "cold_smoke",
+    255: "cooldown",
 }
 
 
