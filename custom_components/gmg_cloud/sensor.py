@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from collections import deque
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -11,7 +13,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -89,6 +91,7 @@ async def async_setup_entry(
         grill_id = grill.get("grillId", "unknown")
 
         # Temperature sensors
+        entities.append(GMGProbeSensor(coordinator, grill, "grill_temp", "Grill Temp", "grillTemp"))
         entities.append(GMGProbeSensor(coordinator, grill, "probe1", "Food Probe 1", "foodTemp"))
         entities.append(GMGProbeSensor(coordinator, grill, "probe2", "Food Probe 2", "foodTemp2"))
         entities.append(GMGProbeSensor(coordinator, grill, "target_grill", "Target Grill Temp", "setGrillTemp"))
@@ -102,6 +105,10 @@ async def async_setup_entry(
         entities.append(GMGProfileSensor(coordinator, grill))
         entities.append(GMGFirmwareSensor(coordinator, grill))
         entities.append(GMGLastUpdatedSensor(coordinator, grill))
+
+        # ETA sensors (estimate time for probes to reach target temp)
+        entities.append(GMGProbeETASensor(coordinator, grill, 1, "foodTemp", "setFoodTemp"))
+        entities.append(GMGProbeETASensor(coordinator, grill, 2, "foodTemp2", "setFoodTemp2"))
 
     async_add_entities(entities)
 
@@ -485,4 +492,161 @@ class GMGLastUpdatedSensor(CoordinatorEntity, SensorEntity):
                 self._attr_native_value = None
         else:
             self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+def _linear_regression_rate(samples: deque) -> float | None:
+    """Compute rate of change (units per minute) via simple linear regression.
+
+    samples: deque of (timestamp_seconds, value) tuples.
+    Returns slope in units/minute, or None if insufficient data.
+    """
+    n = len(samples)
+    if n < 3:
+        return None
+
+    # Use minutes relative to first sample for numerical stability
+    t0 = samples[0][0]
+    sum_x = sum_y = sum_xx = sum_xy = 0.0
+    for ts, val in samples:
+        x = (ts - t0) / 60.0  # minutes
+        sum_x += x
+        sum_y += val
+        sum_xx += x * x
+        sum_xy += x * val
+
+    denom = n * sum_xx - sum_x * sum_x
+    if abs(denom) < 1e-9:
+        return None
+
+    slope = (n * sum_xy - sum_x * sum_y) / denom
+    return slope
+
+
+class GMGProbeETASensor(CoordinatorEntity, SensorEntity):
+    """GMG probe ETA sensor.
+
+    Estimates minutes remaining until a food probe reaches its target
+    temperature, based on linear regression of recent readings.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+
+    # Max 24 hours -- beyond this the estimate is unreliable
+    _MAX_ETA_MINUTES = 1440
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        grill: dict,
+        probe_num: int,
+        temp_field: str,
+        target_field: str,
+    ) -> None:
+        """Initialize the ETA sensor."""
+        super().__init__(coordinator)
+        self._grill = grill
+        self._grill_id = grill.get("grillId", "unknown")
+        self._grill_name = grill.get("grillName", "GMG Grill")
+        self._probe_num = probe_num
+        self._temp_field = temp_field
+        self._target_field = target_field
+
+        # Rolling buffer: (timestamp_seconds, temperature)
+        self._samples: deque[tuple[float, float]] = deque(maxlen=20)
+
+        self._attr_unique_id = f"gmg_cloud_{self._grill_id}_probe_{probe_num}_eta"
+        self._attr_name = f"Probe {probe_num} ETA"
+        self._attr_native_value = None
+        self._rate_per_minute: float | None = None
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        return _device_info(self._grill, self._grill_id, self._grill_name)
+
+    @property
+    def icon(self) -> str:
+        if self._attr_native_value is not None:
+            return "mdi:timer-sand"
+        return "mdi:timer-off-outline"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        from datetime import datetime, timezone, timedelta
+
+        attrs: dict[str, Any] = {}
+        state = _get_state(self.coordinator, self._grill_id)
+        if state:
+            attrs["current_temp"] = state.get(self._temp_field)
+            target = state.get(self._target_field, 0)
+            attrs["target_temp"] = target if target > 0 else None
+        attrs["rate_per_minute"] = (
+            round(self._rate_per_minute, 2)
+            if self._rate_per_minute is not None
+            else None
+        )
+        attrs["samples_collected"] = len(self._samples)
+        if self._attr_native_value is not None and self._attr_native_value > 0:
+            eta_time = datetime.now(timezone.utc) + timedelta(
+                minutes=self._attr_native_value
+            )
+            attrs["eta_timestamp"] = eta_time.isoformat()
+        else:
+            attrs["eta_timestamp"] = None
+        return attrs
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        state = _get_state(self.coordinator, self._grill_id)
+        if not state:
+            self._attr_native_value = None
+            self.async_write_ha_state()
+            return
+
+        current_temp = state.get(self._temp_field)
+        target_temp = state.get(self._target_field, 0)
+
+        # Record sample if we have a valid temperature
+        if current_temp is not None and isinstance(current_temp, (int, float)):
+            self._samples.append((time.monotonic(), float(current_temp)))
+
+        # No target set (0 means unset)
+        if not target_temp or target_temp <= 0:
+            self._attr_native_value = None
+            self._rate_per_minute = None
+            self.async_write_ha_state()
+            return
+
+        # Already at or above target
+        if current_temp is not None and current_temp >= target_temp:
+            self._attr_native_value = 0
+            self._rate_per_minute = None
+            self.async_write_ha_state()
+            return
+
+        # Compute rate via linear regression
+        rate = _linear_regression_rate(self._samples)
+        self._rate_per_minute = rate
+
+        if rate is None or rate <= 0.05:
+            # Not heating (stalled, cooling, or insufficient data)
+            self._attr_native_value = None
+            self.async_write_ha_state()
+            return
+
+        remaining = (target_temp - current_temp) / rate
+        # Clamp to reasonable max
+        if remaining > self._MAX_ETA_MINUTES:
+            self._attr_native_value = None
+        else:
+            self._attr_native_value = round(remaining, 1)
+
         self.async_write_ha_state()

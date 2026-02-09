@@ -34,14 +34,15 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     api = data["api"]
     grills = data["grills"]
+    trigger_burst = data.get("trigger_burst")
 
     entities = []
     for grill in grills:
         entities.append(
-            GMGProbeTargetNumber(coordinator, api, grill, probe=1)
+            GMGProbeTargetNumber(coordinator, api, grill, probe=1, trigger_burst=trigger_burst)
         )
         entities.append(
-            GMGProbeTargetNumber(coordinator, api, grill, probe=2)
+            GMGProbeTargetNumber(coordinator, api, grill, probe=2, trigger_burst=trigger_burst)
         )
 
     async_add_entities(entities)
@@ -68,12 +69,14 @@ class GMGProbeTargetNumber(CoordinatorEntity, NumberEntity):
         api: GMGCloudApi,
         grill: dict,
         probe: int,
+        trigger_burst: callable = None,
     ) -> None:
         """Initialize the number entity."""
         super().__init__(coordinator)
         self._api = api
         self._grill = grill
         self._probe = probe
+        self._trigger_burst = trigger_burst
         self._grill_id = grill.get("grillId", "unknown")
         self._grill_name = grill.get("grillName", "GMG Grill")
 
@@ -123,4 +126,6 @@ class GMGProbeTargetNumber(CoordinatorEntity, NumberEntity):
         if success:
             self._attr_native_value = temp
             self.async_write_ha_state()
+            if self._trigger_burst:
+                self._trigger_burst()
             await self.coordinator.async_request_refresh()

@@ -41,10 +41,11 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     api = data["api"]
     grills = data["grills"]
+    trigger_burst = data.get("trigger_burst")
 
     entities = []
     for grill in grills:
-        entities.append(GMGClimateEntity(coordinator, api, grill))
+        entities.append(GMGClimateEntity(coordinator, api, grill, trigger_burst))
 
     async_add_entities(entities)
 
@@ -65,11 +66,13 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
         coordinator: DataUpdateCoordinator,
         api: GMGCloudApi,
         grill: dict,
+        trigger_burst: callable = None,
     ) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._api = api
         self._grill = grill
+        self._trigger_burst = trigger_burst
         self._grill_id = grill.get("grillId", "unknown")
         self._grill_name = grill.get("grillName", "GMG Grill")
         
@@ -165,6 +168,11 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
 
         self.async_write_ha_state()
 
+    def _activate_burst(self) -> None:
+        """Activate burst polling after a command."""
+        if self._trigger_burst:
+            self._trigger_burst()
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode (power on/off).
 
@@ -175,11 +183,13 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
             if await self._api.async_power_off(self._grill):
                 self._hvac_mode = HVACMode.OFF
                 self.async_write_ha_state()
+                self._activate_burst()
                 await self.coordinator.async_request_refresh()
         elif hvac_mode == HVACMode.HEAT:
             if await self._api.async_power_on_grill(self._grill):
                 self._hvac_mode = HVACMode.HEAT
                 self.async_write_ha_state()
+                self._activate_burst()
                 await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -189,6 +199,7 @@ class GMGClimateEntity(CoordinatorEntity, ClimateEntity):
             if await self._api.async_set_grill_temp(self._grill, temp):
                 self._target_temp = temp
                 self.async_write_ha_state()
+                self._activate_burst()
                 await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self) -> None:

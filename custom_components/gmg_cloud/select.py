@@ -36,10 +36,11 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     api = data["api"]
     grills = data["grills"]
+    trigger_burst = data.get("trigger_burst")
 
     entities = []
     for grill in grills:
-        entities.append(GMGGrillModeSelect(coordinator, api, grill))
+        entities.append(GMGGrillModeSelect(coordinator, api, grill, trigger_burst))
 
     async_add_entities(entities)
 
@@ -64,11 +65,13 @@ class GMGGrillModeSelect(CoordinatorEntity, SelectEntity):
         coordinator: DataUpdateCoordinator,
         api: GMGCloudApi,
         grill: dict,
+        trigger_burst: callable = None,
     ) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
         self._api = api
         self._grill = grill
+        self._trigger_burst = trigger_burst
         self._grill_id = grill.get("grillId", "unknown")
         self._grill_name = grill.get("grillName", "GMG Grill")
 
@@ -148,4 +151,6 @@ class GMGGrillModeSelect(CoordinatorEntity, SelectEntity):
                 await self._api.async_power_on_grill(self._grill)
 
         self.async_write_ha_state()
+        if self._trigger_burst:
+            self._trigger_burst()
         await self.coordinator.async_request_refresh()

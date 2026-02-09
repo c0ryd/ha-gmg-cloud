@@ -14,8 +14,12 @@ API_BASE_URL = "https://prime-api.gmgserver.net/v1"
 TCP_SERVER = "remote.gmgserver.net"
 TCP_PORT = 8061
 
-# Polling interval (seconds)
-SCAN_INTERVAL = 30
+# Polling intervals (seconds)
+SCAN_INTERVAL = 30  # default / fallback
+SCAN_INTERVAL_ACTIVE = 2  # when grill is on (grillState > 0)
+SCAN_INTERVAL_IDLE = 60  # when grill is off
+SCAN_INTERVAL_BURST = 1  # after a command is sent
+SCAN_BURST_DURATION = 30  # how long burst mode lasts (seconds)
 
 # Config keys
 CONF_EMAIL = "email"

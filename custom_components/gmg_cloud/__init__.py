@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 
 import voluptuous as vol
@@ -12,7 +13,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import (
+    DOMAIN,
+    SCAN_INTERVAL,
+    SCAN_INTERVAL_ACTIVE,
+    SCAN_INTERVAL_IDLE,
+    SCAN_INTERVAL_BURST,
+    SCAN_BURST_DURATION,
+)
 from .api import GMGCloudApi, GMGApiError, GMGAuthError
 
 _LOGGER = logging.getLogger(__name__)
@@ -81,14 +89,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             grill.get("connectionType"),
         )
 
+    # Burst mode state: timestamp until which burst polling is active
+    burst_state = {"until": 0.0}
+
+    def trigger_burst() -> None:
+        """Activate burst polling (1s) for the next SCAN_BURST_DURATION seconds.
+
+        Called by entities after sending a command so the dashboard
+        reflects changes almost instantly.
+        """
+        burst_state["until"] = time.monotonic() + SCAN_BURST_DURATION
+        coordinator.update_interval = timedelta(seconds=SCAN_INTERVAL_BURST)
+        _LOGGER.debug(
+            "Burst polling activated for %ds at %ds interval",
+            SCAN_BURST_DURATION,
+            SCAN_INTERVAL_BURST,
+        )
+
     async def async_update_data() -> dict:
         """Fetch data from API.
 
         Uses the correct endpoint: /grill/{connectionType}|{grillId}/state
         discovered from app decompilation.
+
+        Dynamically adjusts polling interval:
+        - 1s  burst mode for 30s after a command is sent
+        - 2s  when any grill is actively cooking (grillState > 0)
+        - 60s when all grills are off
         """
         try:
             data = {"grills": {}}
+            any_active = False
             for grill in api.get_cached_grills():
                 grill_id = grill.get("grillId")
                 if grill_id:
@@ -98,6 +129,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "state": state,
                         "online": state is not None,
                     }
+                    if state and state.get("grillState", 0) > 0:
+                        any_active = True
+
+            # Determine the right polling interval
+            now = time.monotonic()
+            if now < burst_state["until"]:
+                # Burst mode still active -- keep 1s polling
+                new_interval = SCAN_INTERVAL_BURST
+                mode_label = "burst"
+            elif any_active:
+                new_interval = SCAN_INTERVAL_ACTIVE
+                mode_label = "active"
+            else:
+                new_interval = SCAN_INTERVAL_IDLE
+                mode_label = "idle"
+
+            if coordinator.update_interval != timedelta(seconds=new_interval):
+                _LOGGER.debug(
+                    "Adjusting polling interval to %ds (%s)",
+                    new_interval,
+                    mode_label,
+                )
+                coordinator.update_interval = timedelta(seconds=new_interval)
+
             return data
         except GMGApiError as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err
@@ -118,6 +173,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "api": api,
         "coordinator": coordinator,
         "grills": grills,
+        "trigger_burst": trigger_burst,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
