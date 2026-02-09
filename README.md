@@ -79,6 +79,12 @@ A custom [Home Assistant](https://www.home-assistant.io/) integration that monit
 | Probe 1 Target Temp | Set food probe 1 target temperature (100-250°F slider) |
 | Probe 2 Target Temp | Set food probe 2 target temperature (100-250°F slider) |
 
+### Select Controls
+
+| Entity | Description |
+|--------|-------------|
+| Grill Mode | Select power-on mode: grill, smoke, or pizza. Changing while running restarts the grill in the new mode. |
+
 ### Binary Sensors
 
 | Entity | Description |

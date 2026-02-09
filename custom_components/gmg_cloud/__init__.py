@@ -17,7 +17,7 @@ from .api import GMGCloudApi, GMGApiError, GMGAuthError
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER, Platform.SELECT]
 
 CONFIG_SCHEMA = vol.Schema(
     {
